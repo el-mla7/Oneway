@@ -1,0 +1,1463 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>oneway — a hash bench</title>
+<meta name="description" content="Run MD5, SHA-1, SHA-2 and SHA-3 in your browser. See how one flipped bit avalanches through the digest, and why passwords need more than a plain hash.">
+<style>
+:root{
+  --paper:#f5f2ea;
+  --paper-2:#ece7db;
+  --paper-3:#e0d9c9;
+  --ink:#16150f;
+  --ink-2:#3b3830;
+  --muted:#7c7568;
+  --line:#dbd5c6;
+  --line-2:#c3bcaa;
+  --accent:#d2451e;
+  --accent-ink:#a0300d;
+  --accent-wash:#f8e3da;
+  --ok:#2f6f4f;
+  --bad:#a3352a;
+  --font-display:'Iowan Old Style','Palatino Linotype',Palatino,'Book Antiqua',Georgia,ui-serif,serif;
+  --font-body:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  --font-mono:ui-monospace,'SF Mono',SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace;
+  --r:4px;
+  --maxw:1120px;
+  --ease:cubic-bezier(.2,.7,.2,1);
+}
+
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--paper);color:var(--ink);
+  font-family:var(--font-body);font-size:16px;line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px;position:relative;z-index:2}
+@media(max-width:600px){.wrap{padding:0 16px}}
+
+/* ============================================================
+   reveal choreography
+   ============================================================ */
+[data-reveal]{
+  opacity:0;transform:translateY(22px);
+  transition:opacity .85s var(--ease),transform .85s var(--ease);
+  transition-delay:var(--rd,0ms);
+  will-change:opacity,transform;
+}
+[data-reveal].in{opacity:1;transform:none}
+
+/* hero h1 word-by-word */
+.w{
+  display:inline-block;
+  opacity:0;transform:translateY(30px) rotate(1.5deg);
+  animation:wordUp .95s var(--ease) forwards;
+  animation-delay:var(--rd,0ms);
+}
+@keyframes wordUp{to{opacity:1;transform:none}}
+
+/* ============================================================
+   cursor light
+   ============================================================ */
+.glow{position:relative;--mx:50%;--my:50%;isolation:isolate}
+.glow::before{
+  content:"";position:absolute;inset:0;pointer-events:none;z-index:0;
+  background:radial-gradient(440px circle at var(--mx) var(--my),rgba(210,69,30,.10),transparent 62%);
+  opacity:0;transition:opacity .45s ease;
+}
+.glow:hover::before{opacity:1}
+.glow > *{position:relative;z-index:1}
+
+/* ============================================================
+   top bar
+   ============================================================ */
+.topbar{
+  position:sticky;top:0;z-index:40;background:var(--paper);
+  border-bottom:1px solid var(--line);
+  animation:fadeDown .7s var(--ease) both;
+}
+@keyframes fadeDown{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:none}}
+.topbar-in{display:flex;align-items:center;gap:20px;height:56px}
+.wordmark{
+  display:flex;align-items:center;gap:8px;text-decoration:none;color:var(--ink);
+  font-family:var(--font-mono);font-size:15px;font-weight:600;letter-spacing:-.02em;
+}
+.wordmark svg{width:20px;height:20px;color:var(--accent);flex:none;transition:transform .35s var(--ease)}
+.wordmark:hover svg{transform:translateX(4px)}
+.topnav{display:flex;gap:18px;margin-left:auto}
+.topnav a{
+  font-family:var(--font-mono);font-size:12.5px;color:var(--muted);text-decoration:none;
+  padding-bottom:2px;border-bottom:1px solid transparent;
+  transition:color .2s ease,border-color .2s ease;
+}
+.topnav a:hover{color:var(--ink);border-bottom-color:var(--ink)}
+.kbd-hint{font-family:var(--font-mono);font-size:11.5px;color:var(--muted)}
+kbd{
+  font-family:var(--font-mono);font-size:11px;border:1px solid var(--line-2);
+  border-bottom-width:2px;border-radius:3px;padding:1px 5px;background:var(--paper-2);color:var(--ink-2);
+}
+@media(max-width:720px){.topnav,.kbd-hint{display:none}}
+
+/* ============================================================
+   hero
+   ============================================================ */
+.hero{
+  position:relative;overflow:hidden;
+  padding:80px 0 56px;border-bottom:1px solid var(--line);
+}
+/* drifting hex glyphs in the background */
+.hero-drift{position:absolute;inset:0;pointer-events:none;z-index:1;overflow:hidden}
+.hero-drift span{
+  position:absolute;left:var(--x);top:var(--y);
+  font-family:var(--font-mono);font-size:11px;
+  color:var(--ink);opacity:.07;letter-spacing:.08em;
+  animation:float var(--s,16s) ease-in-out infinite;
+  animation-delay:var(--dd,0s);
+}
+@keyframes float{
+  0%,100%{transform:translate(0,0)}
+  50%{transform:translate(8px,-16px)}
+}
+/* slow drifting dot grid */
+.hero-dots{
+  position:absolute;inset:-40px;pointer-events:none;z-index:0;
+  background-image:radial-gradient(circle,rgba(22,21,15,.10) 1px,transparent 1px);
+  background-size:26px 26px;
+  -webkit-mask-image:radial-gradient(ellipse 65% 70% at 50% 42%,#000 0%,transparent 72%);
+          mask-image:radial-gradient(ellipse 65% 70% at 50% 42%,#000 0%,transparent 72%);
+  animation:drift 90s linear infinite;
+}
+@keyframes drift{to{background-position:52px 52px}}
+
+.hero h1{
+  font-family:var(--font-display);font-weight:400;
+  font-size:clamp(40px,7.2vw,76px);line-height:1.02;letter-spacing:-.025em;
+  margin:0 0 22px;max-width:14ch;
+}
+.w-em{font-style:italic;color:var(--accent-ink)}
+.hero p{
+  max-width:56ch;font-size:17.5px;color:var(--ink-2);margin:0 0 26px;
+  animation:wordUp .9s var(--ease) both;animation-delay:.45s;
+}
+.hero-strip{
+  display:flex;flex-wrap:wrap;gap:8px 20px;
+  font-family:var(--font-mono);font-size:12px;color:var(--muted);
+  animation:wordUp .9s var(--ease) both;animation-delay:.65s;
+}
+.hero-strip span{display:flex;align-items:center;gap:7px}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--ok);flex:none}
+.hero-strip .dot{animation:pulse 2.4s ease-in-out infinite}
+@keyframes pulse{
+  0%,100%{opacity:1;transform:scale(1)}
+  50%{opacity:.45;transform:scale(.72)}
+}
+
+/* ============================================================
+   generic section bits
+   ============================================================ */
+.section{padding:64px 0}
+.eyebrow{
+  font-family:var(--font-mono);font-size:11.5px;text-transform:uppercase;letter-spacing:.14em;
+  color:var(--accent-ink);margin:0 0 14px;
+}
+h2{
+  font-family:var(--font-display);font-weight:400;
+  font-size:clamp(28px,4vw,42px);line-height:1.1;letter-spacing:-.02em;
+  margin:0 0 16px;max-width:20ch;
+}
+h3{font-family:var(--font-mono);font-size:14px;font-weight:600;margin:0;letter-spacing:-.01em}
+h4{font-family:var(--font-mono);font-size:11.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:18px 0 8px}
+.lede{max-width:62ch;color:var(--ink-2);font-size:16.5px;margin:0 0 28px}
+
+/* ============================================================
+   bench
+   ============================================================ */
+.bench{display:grid;grid-template-columns:minmax(300px,400px) minmax(0,1fr);gap:52px;align-items:start}
+@media(max-width:920px){.bench{grid-template-columns:1fr;gap:36px}}
+
+label.field{display:block;font-family:var(--font-mono);font-size:11.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:8px}
+textarea,input[type=text]{
+  width:100%;font-family:var(--font-mono);font-size:14px;line-height:1.5;
+  color:var(--ink);background:var(--paper-2);
+  border:1px solid var(--line-2);border-radius:var(--r);padding:12px 13px;resize:vertical;
+  transition:border-color .18s ease,background .18s ease;
+}
+textarea:hover,input[type=text]:hover{border-color:var(--muted)}
+textarea:focus,input:focus{outline:2px solid var(--ink);outline-offset:1px}
+textarea{min-height:104px}
+.counter{font-family:var(--font-mono);font-size:11.5px;color:var(--muted);margin-top:6px;transition:color .2s ease}
+
+/* algorithm picker */
+.picker{margin-top:34px}
+.algolist{margin-top:10px}
+.algo{
+  position:relative;display:grid;
+  grid-template-columns:16px minmax(0,1fr) auto;
+  grid-template-areas:"dot name tag" "dot meta meta";
+  align-items:center;gap:1px 11px;
+  padding:10px 12px;border:1px solid var(--line);border-radius:var(--r);
+  background:var(--paper);cursor:pointer;
+  transition:background .16s ease,border-color .16s ease,color .16s ease,transform .18s var(--ease);
+}
+.algo + .algo{margin-top:5px}
+.algo:hover{border-color:var(--line-2);background:var(--paper-2);transform:translateX(3px)}
+.algo input{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
+.algo .dot-ind{
+  grid-area:dot;width:14px;height:14px;border-radius:50%;
+  border:1.7px solid var(--line-2);
+  transition:border-color .16s ease,background .16s ease,box-shadow .16s ease;
+}
+.algo:hover .dot-ind{border-color:var(--muted)}
+.algo-name{grid-area:name;font-family:var(--font-mono);font-size:14px;font-weight:600;letter-spacing:-.01em}
+.algo-meta{grid-area:meta;font-family:var(--font-mono);font-size:11.5px;color:var(--muted)}
+.algo-tag{
+  grid-area:tag;font-family:var(--font-mono);font-size:10px;text-transform:uppercase;
+  letter-spacing:.09em;padding:2px 7px;border:1px solid currentColor;border-radius:999px;white-space:nowrap;
+}
+.tag-broken{color:var(--bad)}
+.tag-deprecated{color:var(--muted)}
+.tag-current{color:var(--ok)}
+.tag-alt{color:var(--accent-ink)}
+.algo.is-sel{background:var(--ink);border-color:var(--ink);color:var(--paper);transform:translateX(3px)}
+.algo.is-sel .algo-meta{color:var(--paper-3)}
+.algo.is-sel .dot-ind{
+  border-color:var(--paper);background:var(--paper);
+  box-shadow:inset 0 0 0 3px var(--ink);
+  animation:ring 2.4s ease-in-out infinite;
+}
+@keyframes ring{
+  0%,100%{box-shadow:inset 0 0 0 3px var(--ink),0 0 0 0 rgba(245,242,234,0)}
+  50%{box-shadow:inset 0 0 0 3px var(--ink),0 0 0 5px rgba(245,242,234,.10)}
+}
+.algo.is-sel .algo-tag{color:var(--paper-3)}
+.algo.is-off{opacity:.42;cursor:not-allowed}
+.algo.is-off:hover{transform:none;background:var(--paper)}
+
+/* info button + panel */
+.info{margin-top:9px}
+.info-btn{
+  display:flex;align-items:center;gap:9px;width:100%;text-align:left;
+  font-family:var(--font-mono);font-size:12.5px;color:var(--ink-2);
+  background:transparent;border:1px dashed var(--line-2);border-radius:var(--r);
+  padding:10px 12px;cursor:pointer;
+  transition:border-color .18s ease,color .18s ease,background .18s ease;
+}
+.info-btn:hover{border-style:solid;border-color:var(--ink);color:var(--ink);background:var(--paper-2)}
+.info-btn svg{width:14px;height:14px;flex:none;transition:transform .22s var(--ease)}
+.info-btn[aria-expanded=true] svg{transform:rotate(90deg)}
+.info-panel{
+  margin-top:8px;padding:16px;border:1px solid var(--line);border-radius:var(--r);
+  background:var(--paper-2);animation:drop .28s var(--ease) both;
+}
+@keyframes drop{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+.info-lede{margin:0 0 14px;font-size:14.5px;color:var(--ink-2);line-height:1.5}
+.specs{margin:0;display:grid;gap:6px}
+.specs > div{display:grid;grid-template-columns:88px minmax(0,1fr);gap:10px}
+.specs dt{font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);padding-top:2px}
+.specs dd{margin:0;font-family:var(--font-mono);font-size:12.5px;color:var(--ink)}
+.feat{list-style:none;margin:0;padding:0;display:grid;gap:7px}
+.feat li{position:relative;padding-left:16px;font-size:13.5px;line-height:1.5;color:var(--ink-2)}
+.feat li::before{content:"";position:absolute;left:0;top:8px;width:6px;height:6px;border-radius:50%;background:var(--accent)}
+.info-foot{font-size:13px;color:var(--ink-2);margin:12px 0 0;line-height:1.5}
+.info-foot b{font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+
+/* ============================================================
+   output
+   ============================================================ */
+.out-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 14px;margin-bottom:4px}
+.out-name{font-family:var(--font-mono);font-size:19px;font-weight:600;letter-spacing:-.02em}
+.out-meta{font-family:var(--font-mono);font-size:12px;color:var(--muted)}
+.bytegrid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(40px,1fr));
+  gap:4px;margin:16px 0 18px;
+}
+.byte{
+  position:relative;overflow:hidden;border-radius:2px;background:var(--paper-2);
+  font-family:var(--font-mono);font-size:12.5px;text-align:center;padding:7px 0;color:var(--ink);
+  animation:byteIn .4s var(--ease) both;
+  animation-delay:calc(var(--i,0) * 8ms);
+}
+@keyframes byteIn{from{opacity:0;transform:scale(.82)}to{opacity:1;transform:none}}
+.byte::before{content:"";position:absolute;inset:0;background:var(--ink);opacity:calc(var(--t,0) * .2)}
+.byte > span{position:relative}
+.byte.diff{background:var(--accent-wash);color:var(--accent-ink);font-weight:700}
+.byte.diff::before{display:none}
+.hexout{
+  font-family:var(--font-mono);font-size:12.5px;line-height:1.7;word-break:break-all;
+  background:var(--paper-2);border:1px solid var(--line);border-radius:var(--r);
+  padding:13px;color:var(--ink-2);
+  transition:border-color .2s ease,background .2s ease;
+}
+.hexout:hover{border-color:var(--line-2);background:var(--paper-3)}
+.btnrow{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.btn{
+  font-family:var(--font-mono);font-size:12.5px;padding:9px 15px;border-radius:var(--r);
+  border:1px solid var(--ink);background:var(--ink);color:var(--paper);cursor:pointer;
+  transition:transform .08s ease,background .18s ease,color .18s ease,border-color .18s ease;
+}
+.btn:hover{background:var(--ink-2);border-color:var(--ink-2)}
+.btn:active{transform:translateY(1px) scale(.985)}
+.btn.ghost{background:transparent;color:var(--ink)}
+.btn.ghost:hover{background:var(--paper-2)}
+.btn[disabled]{opacity:.4;cursor:not-allowed}
+.btn.said{background:var(--accent);border-color:var(--accent);color:#fff}
+
+/* avalanche */
+.avalanche{margin-top:34px;border-top:1px solid var(--line);padding-top:22px}
+.av-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px}
+.av-note{font-size:13px;color:var(--ink-2);margin:14px 0 0;line-height:1.55}
+.av-note b{font-family:var(--font-mono);color:var(--ink);font-weight:600}
+.av-flip{font-family:var(--font-mono);font-size:12px;color:var(--muted);margin:14px 0 0}
+
+/* ============================================================
+   pull quote
+   ============================================================ */
+.pullquote{
+  position:relative;overflow:hidden;
+  border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+  padding:72px 0;margin:16px 0;text-align:center;
+}
+.pullquote p{
+  font-family:var(--font-display);font-weight:400;
+  font-size:clamp(24px,3.8vw,42px);line-height:1.18;letter-spacing:-.02em;
+  max-width:22ch;margin:0 auto;
+}
+.pullquote cite{
+  display:block;margin-top:22px;font-family:var(--font-mono);font-size:11.5px;
+  text-transform:uppercase;letter-spacing:.14em;color:var(--muted);font-style:normal;
+}
+
+/* ============================================================
+   vault
+   ============================================================ */
+.vault-controls{
+  display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:12px;align-items:end;
+  margin-bottom:28px;
+}
+.vault-controls .f{display:grid;gap:6px}
+@media(max-width:760px){.vault-controls{grid-template-columns:1fr;align-items:stretch}}
+select{
+  font-family:var(--font-mono);font-size:13px;padding:10px 11px;border-radius:var(--r);
+  border:1px solid var(--line-2);background:var(--paper-2);color:var(--ink);
+  transition:border-color .18s ease;
+}
+select:hover{border-color:var(--muted)}
+.vaultgrid{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+@media(max-width:860px){.vaultgrid{grid-template-columns:1fr}}
+.panel{
+  border:1px solid var(--line);border-radius:var(--r);padding:18px;background:var(--paper);
+  transition:border-color .28s ease,transform .28s var(--ease);
+}
+.panel:hover{transform:translateY(-2px)}
+.panel.bad{border-color:var(--line-2);background:var(--paper-2)}
+.panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.pill{
+  font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:.09em;
+  padding:2px 8px;border-radius:999px;border:1px solid currentColor;
+}
+.pill-bad{color:var(--bad)}
+.pill-ok{color:var(--ok)}
+.panel-sub{font-size:13px;color:var(--ink-2);margin:10px 0 16px;line-height:1.5}
+.rows{display:grid;gap:8px}
+.row{
+  display:grid;grid-template-columns:52px minmax(0,1fr);gap:10px;align-items:start;
+  border:1px solid var(--line);border-radius:var(--r);padding:9px 11px;background:var(--paper);
+  transition:border-color .2s ease,background .2s ease;
+}
+.row:hover{border-color:var(--line-2)}
+.panel.bad .row{background:var(--paper)}
+.row-user{font-family:var(--font-mono);font-size:11.5px;color:var(--muted);padding-top:2px}
+.row-hash{font-family:var(--font-mono);font-size:11.5px;line-height:1.55;word-break:break-all;color:var(--ink-2)}
+.row.same .row-hash{color:var(--bad)}
+.panel-foot{font-family:var(--font-mono);font-size:11.5px;color:var(--muted);margin:16px 0 0;line-height:1.6}
+.vault-note{
+  font-size:13.5px;color:var(--ink-2);max-width:70ch;margin:26px 0 0;line-height:1.6;
+  border-top:1px solid var(--line);padding-top:18px;
+}
+
+/* ============================================================
+   reference
+   ============================================================ */
+.tablewrap{
+  overflow-x:auto;border:1px solid var(--line);border-radius:var(--r);
+  transition:border-color .22s ease;
+}
+.tablewrap:hover{border-color:var(--line-2)}
+table{border-collapse:collapse;width:100%;min-width:640px;font-family:var(--font-mono);font-size:12.5px}
+th,td{text-align:left;padding:10px 13px;border-bottom:1px solid var(--line)}
+th{
+  font-size:10.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);
+  font-weight:600;background:var(--paper-2);
+}
+tbody tr{transition:background .16s ease}
+tbody tr:hover{background:var(--paper-2)}
+tbody tr:last-child td{border-bottom:none}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+td.name{font-weight:600}
+.st{font-size:11px}
+.st-broken{color:var(--bad)}
+.st-deprecated{color:var(--muted)}
+.st-current{color:var(--ok)}
+.st-alt{color:var(--accent-ink)}
+.rules{margin-top:32px;display:grid;gap:18px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.rule{
+  border-top:2px solid var(--ink);padding-top:12px;
+  transition:border-color .22s ease,transform .22s var(--ease);
+}
+.rule:hover{border-color:var(--accent);transform:translateY(-2px)}
+.rule h4{margin:0 0 8px;color:var(--ink);font-size:11px}
+.rule p{margin:0;font-size:13.5px;color:var(--ink-2);line-height:1.55}
+
+/* ============================================================
+   footer / credits
+   ============================================================ */
+footer{
+  border-top:1px solid var(--line);padding:56px 0 64px;margin-top:24px;
+  background:linear-gradient(180deg,var(--paper) 0%,var(--paper-2) 100%);
+}
+.credits{
+  display:grid;grid-template-columns:1fr auto;gap:32px;align-items:end;
+  padding-bottom:32px;border-bottom:1px solid var(--line);
+}
+@media(max-width:680px){.credits{grid-template-columns:1fr;align-items:start}}
+.credits-kicker{
+  font-family:var(--font-mono);font-size:11px;text-transform:uppercase;
+  letter-spacing:.14em;color:var(--muted);margin:0 0 8px;
+}
+.credits-name{
+  font-family:var(--font-display);font-weight:400;font-style:italic;
+  font-size:clamp(32px,5vw,52px);line-height:1;letter-spacing:-.025em;
+  margin:0 0 8px;color:var(--ink);
+}
+.credits-role{
+  font-family:var(--font-mono);font-size:12px;color:var(--ink-2);margin:0;
+}
+.socials{display:flex;gap:10px;margin-top:10px}
+.social{
+  display:grid;place-items:center;
+  width:46px;height:46px;border-radius:50%;
+  border:1px solid var(--line-2);color:var(--ink-2);
+  background:var(--paper);text-decoration:none;
+  transition:transform .25s var(--ease),border-color .2s ease,color .2s ease,background .2s ease;
+}
+.social:hover{
+  border-color:var(--ink);color:var(--paper);background:var(--ink);
+  transform:translateY(-3px);
+}
+.social:active{transform:translateY(-1px)}
+.social svg{width:20px;height:20px;display:block}
+.foot-meta{
+  display:flex;flex-wrap:wrap;gap:14px 32px;justify-content:space-between;align-items:baseline;
+  padding-top:24px;
+}
+footer p{font-family:var(--font-mono);font-size:11.5px;color:var(--muted);margin:0;line-height:1.7}
+footer a{color:var(--ink-2);text-decoration:none;border-bottom:1px solid var(--line-2)}
+footer a:hover{color:var(--ink);border-bottom-color:var(--ink)}
+.notice{
+  font-family:var(--font-mono);font-size:12px;color:var(--bad);
+  border:1px solid var(--bad);border-radius:var(--r);padding:10px 13px;margin-bottom:18px;
+  animation:drop .3s var(--ease) both;
+}
+
+/* ============================================================
+   reduced motion
+   ============================================================ */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:.01ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.01ms !important;
+  }
+  [data-reveal],.w,.hero p,.hero-strip{opacity:1 !important;transform:none !important}
+  .hero-dots{animation:none}
+  .hero-drift span{animation:none}
+}
+</style>
+</head>
+<body id="top">
+
+<header class="topbar">
+  <div class="wrap topbar-in">
+    <a class="wordmark" href="#top">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M3 12h10.5"/><path d="M10.5 8.5 14 12l-3.5 3.5"/><path d="M18.5 5v14"/>
+      </svg>
+      <span>oneway</span>
+    </a>
+    <nav class="topnav">
+      <a href="#bench">Bench</a>
+      <a href="#vault">Passwords</a>
+      <a href="#reference">Reference</a>
+    </nav>
+    <span class="kbd-hint">press <kbd>/</kbd> to type</span>
+  </div>
+</header>
+
+<main>
+
+<section class="hero glow" data-od-id="hero">
+  <div class="hero-dots" aria-hidden="true"></div>
+  <div class="hero-drift" aria-hidden="true">
+    <span style="--x:7%;--y:22%;--s:16s;--dd:0s">a4f1</span>
+    <span style="--x:84%;--y:14%;--s:20s;--dd:-3s">7c02</span>
+    <span style="--x:14%;--y:74%;--s:18s;--dd:-6s">e9b3</span>
+    <span style="--x:72%;--y:82%;--s:22s;--dd:-2s">3d5a</span>
+    <span style="--x:92%;--y:52%;--s:17s;--dd:-9s">ff08</span>
+    <span style="--x:46%;--y:8%;--s:24s;--dd:-5s">1b6e</span>
+    <span style="--x:34%;--y:88%;--s:19s;--dd:-11s">90c7</span>
+    <span style="--x:60%;--y:34%;--s:21s;--dd:-7s">52da</span>
+  </div>
+  <div class="wrap">
+    <h1>
+      <span class="w" style="--rd:0ms">Everything</span>
+      <span class="w" style="--rd:90ms">has</span>
+      <span class="w" style="--rd:180ms">a</span>
+      <span class="w w-em" style="--rd:270ms">fingerprint.</span>
+    </h1>
+    <p>A hash function turns any input — a word, a file, a password — into a fixed-length string. Change one character and the entire string changes. There is no way back.</p>
+    <div class="hero-strip">
+      <span><i class="dot"></i>7 functions, run locally</span>
+      <span>nothing you type leaves this tab</span>
+      <span>no build step, one file</span>
+    </div>
+  </div>
+</section>
+
+<section class="section wrap" id="bench" data-od-id="bench">
+  <div class="bench">
+
+    <!-- LEFT: input + picker -->
+    <div class="col-left">
+      <p class="eyebrow" data-reveal>01 — the input</p>
+      <label class="field" for="input" data-reveal style="--rd:60ms">Anything you like</label>
+      <textarea id="input" spellcheck="false" autocomplete="off" placeholder="Type here — a sentence, a password, a whole file's worth of text." data-reveal style="--rd:120ms"></textarea>
+      <div class="counter" id="counter" data-reveal style="--rd:180ms">0 characters · 0 bytes</div>
+
+      <div class="picker">
+        <p class="eyebrow" style="margin-top:34px" data-reveal style="--rd:240ms">02 — the function</p>
+        <div class="algolist" id="algolist" data-reveal-stagger>
+          <!-- rows injected by script; the info block is moved under the selected row -->
+          <div class="info" id="info">
+            <button class="info-btn" id="infoBtn" aria-expanded="false" aria-controls="infoPanel">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M9 6l6 6-6 6"/>
+              </svg>
+              <span id="infoLabel">About</span>
+            </button>
+            <div class="info-panel" id="infoPanel" hidden></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: digest -->
+    <div class="col-right">
+      <p class="eyebrow" data-reveal>03 — the digest</p>
+      <div class="out-head" data-reveal style="--rd:80ms">
+        <span class="out-name" id="outName">—</span>
+        <span class="out-meta" id="outMeta"></span>
+      </div>
+      <div class="bytegrid" id="bytegrid" data-reveal style="--rd:160ms"></div>
+      <div class="hexout" id="hexout" data-reveal style="--rd:240ms">—</div>
+      <div class="btnrow" data-reveal style="--rd:320ms">
+        <button class="btn" id="copyBtn">Copy hex</button>
+        <button class="btn ghost" id="clearBtn">Clear input</button>
+      </div>
+
+      <div class="avalanche" data-reveal style="--rd:400ms">
+        <div class="av-head">
+          <h3>One bit flipped</h3>
+          <button class="btn ghost" id="avBtn" aria-expanded="false" aria-controls="avBody">Show avalanche</button>
+        </div>
+        <div id="avBody" hidden>
+          <p class="av-flip" id="avFlip"></p>
+          <div class="bytegrid" id="avGrid"></div>
+          <p class="av-note" id="avNote"></p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section class="pullquote glow" data-od-id="quote">
+  <div class="wrap">
+    <p data-reveal>A hash is not encryption. There is no key and nothing to decrypt — only a fingerprint you can compare.</p>
+    <cite data-reveal style="--rd:200ms">the one thing to remember</cite>
+  </div>
+</section>
+
+<section class="section wrap" id="vault" data-od-id="vault">
+  <p class="eyebrow" data-reveal>04 — passwords</p>
+  <h2 data-reveal style="--rd:80ms">Storing a password is not the same as hashing one</h2>
+  <p class="lede" data-reveal style="--rd:160ms">A cryptographic hash is designed to be <em>fast</em>. That is exactly the wrong property when the thing you are protecting is a password. Below, alice and bob pick the same password — the way real users do.</p>
+
+  <div id="cryptoNotice"></div>
+
+  <div class="vault-controls" data-reveal style="--rd:220ms">
+    <div class="f">
+      <label class="field" for="pw">Password both users chose</label>
+      <input id="pw" type="text" value="hunter2" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="f">
+      <label class="field" for="iters">PBKDF2 iterations</label>
+      <select id="iters">
+        <option value="100000">100,000</option>
+        <option value="310000" selected>310,000</option>
+        <option value="600000">600,000</option>
+      </select>
+    </div>
+    <button class="btn" id="pwBtn">Store both ways</button>
+  </div>
+
+  <div class="vaultgrid">
+    <div class="panel bad glow" data-reveal style="--rd:280ms">
+      <div class="panel-head">
+        <h3>Plain SHA-256</h3>
+        <span class="pill pill-bad">the wrong way</span>
+      </div>
+      <p class="panel-sub">No salt, one pass. Identical passwords produce identical digests, so one cracked row unlocks every account that shares it.</p>
+      <div class="rows" id="badRows">
+        <div class="row"><span class="row-user">alice</span><code class="row-hash">press “Store both ways”</code></div>
+        <div class="row"><span class="row-user">bob</span><code class="row-hash">—</code></div>
+      </div>
+      <p class="panel-foot" id="badFoot">Measured on this device: —</p>
+    </div>
+
+    <div class="panel ok glow" data-reveal style="--rd:360ms">
+      <div class="panel-head">
+        <h3>PBKDF2-HMAC-SHA-256</h3>
+        <span class="pill pill-ok">the right way</span>
+      </div>
+      <p class="panel-sub">A fresh random 16-byte salt per user, plus hundreds of thousands of iterations. Same password, entirely different records.</p>
+      <div class="rows" id="okRows">
+        <div class="row"><span class="row-user">alice</span><code class="row-hash">press “Store both ways”</code></div>
+        <div class="row"><span class="row-user">bob</span><code class="row-hash">—</code></div>
+      </div>
+      <p class="panel-foot" id="okFoot">Measured on this device: —</p>
+    </div>
+  </div>
+
+  <p class="vault-note" data-reveal style="--rd:440ms">PBKDF2 is the weakest of the four acceptable answers — Argon2id, then scrypt, then bcrypt, then PBKDF2. It is here because your browser can run it natively through Web Crypto with no dependencies. Argon2id is memory-hard, which is what makes GPU cracking genuinely expensive rather than merely slow.</p>
+</section>
+
+<section class="section wrap" id="reference" data-od-id="reference">
+  <p class="eyebrow" data-reveal>05 — reference</p>
+  <h2 data-reveal style="--rd:80ms">Which function, and what do the numbers mean?</h2>
+  <p class="lede" data-reveal style="--rd:160ms">The number in a hash function's name is its <strong>output size in bits</strong>. Divide by 8 for bytes, or by 4 for the hex characters you actually see on screen. That is the whole trick: SHA-256 → 32 bytes → 64 hex characters.</p>
+
+  <div class="tablewrap" data-reveal style="--rd:220ms">
+    <table>
+      <thead>
+        <tr>
+          <th>Function</th>
+          <th class="num">Bits</th>
+          <th class="num">Bytes</th>
+          <th class="num">Hex chars</th>
+          <th>Status</th>
+          <th>In the bench</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="name">MD5</td><td class="num">128</td><td class="num">16</td><td class="num">32</td><td class="st st-broken">Broken</td><td>yes</td></tr>
+        <tr><td class="name">SHA-1</td><td class="num">160</td><td class="num">20</td><td class="num">40</td><td class="st st-deprecated">Deprecated</td><td>yes</td></tr>
+        <tr><td class="name">SHA-224</td><td class="num">224</td><td class="num">28</td><td class="num">56</td><td class="st st-current">Fine</td><td>no</td></tr>
+        <tr><td class="name">SHA-256</td><td class="num">256</td><td class="num">32</td><td class="num">64</td><td class="st st-current">Standard</td><td>yes</td></tr>
+        <tr><td class="name">SHA-384</td><td class="num">384</td><td class="num">48</td><td class="num">96</td><td class="st st-current">Fine</td><td>yes</td></tr>
+        <tr><td class="name">SHA-512</td><td class="num">512</td><td class="num">64</td><td class="num">128</td><td class="st st-current">Fine</td><td>yes</td></tr>
+        <tr><td class="name">SHA3-256</td><td class="num">256</td><td class="num">32</td><td class="num">64</td><td class="st st-current">Standard</td><td>yes</td></tr>
+        <tr><td class="name">SHA3-512</td><td class="num">512</td><td class="num">64</td><td class="num">128</td><td class="st st-current">Fine</td><td>yes</td></tr>
+        <tr><td class="name">BLAKE2b</td><td class="num">up to 512</td><td class="num">64</td><td class="num">128</td><td class="st st-alt">Fast</td><td>no</td></tr>
+        <tr><td class="name">BLAKE3</td><td class="num">256 default</td><td class="num">32</td><td class="num">64</td><td class="st st-alt">Fast, parallel</td><td>no</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="rules" data-reveal-stagger>
+    <div class="rule">
+      <h4>Building something new</h4>
+      <p>SHA-256. Twenty years of analysis, hardware acceleration on almost every CPU, and support in every language you will ever touch. SHA-512 when you want more margin.</p>
+    </div>
+    <div class="rule">
+      <h4>Storing passwords</h4>
+      <p>Never a plain hash. Argon2id first, then scrypt, then bcrypt, then PBKDF2. The goal is to make each guess expensive, not to make the digest short.</p>
+    </div>
+    <div class="rule">
+      <h4>Verifying old data</h4>
+      <p>Match whatever produced it — but do not sign anything new with MD5 or SHA-1. Both have working, published collision attacks.</p>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer data-od-id="credits">
+  <div class="wrap">
+    <div class="credits">
+      <div>
+        <p class="credits-kicker" data-reveal>Built by</p>
+        <p class="credits-name" data-reveal style="--rd:80ms">Mohamed Mousa</p>
+        <p class="credits-role" data-reveal style="--rd:160ms">Cybersecurity · Web — oneway, a hash bench</p>
+      </div>
+      <div data-reveal style="--rd:240ms">
+        <p class="credits-kicker">Find me</p>
+        <div class="socials">
+          <a class="social" href="https://github.com/el-mla7" target="_blank" rel="noopener" aria-label="GitHub — el-mla7">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M12 .5C5.73.5.5 5.73.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.7-3.88-1.54-3.88-1.54-.52-1.33-1.28-1.68-1.28-1.68-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.56-.29-5.25-1.28-5.25-5.7 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 015.79 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.43-2.7 5.41-5.27 5.69.41.36.78 1.06.78 2.14 0 1.55-.01 2.8-.01 3.18 0 .31.21.68.8.56A11.51 11.51 0 0023.5 12C23.5 5.73 18.27.5 12 .5z"/>
+            </svg>
+          </a>
+          <a class="social" href="https://linkedin.com/in/mohammed-mousaa" target="_blank" rel="noopener" aria-label="LinkedIn — mohammed-mousaa">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M20.45 20.45h-3.56v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.13 1.45-2.13 2.94v5.67H9.35V9h3.41v1.56h.05c.48-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28zM5.34 7.43a2.06 2.06 0 110-4.13 2.06 2.06 0 010 4.13zm1.78 13.02H3.55V9h3.57v11.45zM22.22 0H1.77C.79 0 0 .77 0 1.73v20.54C0 23.23.79 24 1.77 24h20.45c.98 0 1.78-.77 1.78-1.73V1.73C24 .77 23.2 0 22.22 0z"/>
+            </svg>
+          </a>
+          <a class="social" href="mailto:mohammed.mousa.dev@gmail.com" aria-label="Email — mohammed.mousa.dev@gmail.com">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="2.5" y="5" width="19" height="14" rx="2"/>
+              <path d="M3 6.5l9 6.5 9-6.5"/>
+            </svg>
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <div class="foot-meta" data-reveal style="--rd:320ms">
+      <p>oneway — a hash bench · one HTML file · no build step · no network calls<br>
+         Every number on this page is either a published spec or measured live in your browser.</p>
+      <p>References: <a href="https://github.com/referodesign/refero_skill" target="_blank" rel="noopener">refero_skill</a> (MIT) · NIST FIPS 180-4, FIPS 202 · RFC 1321</p>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function(){
+'use strict';
+
+/* ============================================================
+   helpers
+   ============================================================ */
+const enc = new TextEncoder();
+const $ = (s, r) => (r || document).querySelector(s);
+const toHex = b => Array.from(b, x => x.toString(16).padStart(2, '0')).join('');
+const popcount = n => { let c = 0; while (n) { c += n & 1; n >>= 1; } return c; };
+const b64 = b => btoa(String.fromCharCode.apply(null, Array.from(b)));
+const hasSubtle = !!(window.crypto && window.crypto.subtle);
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ============================================================
+   MD5  (RFC 1321)
+   ============================================================ */
+const MD5_K = new Uint32Array([
+  0xd76aa478,0xe8c7b756,0x242070db,0xc1bdceee,0xf57c0faf,0x4787c62a,0xa8304613,0xfd469501,
+  0x698098d8,0x8b44f7af,0xffff5bb1,0x895cd7be,0x6b901122,0xfd987193,0xa679438e,0x49b40821,
+  0xf61e2562,0xc040b340,0x265e5a51,0xe9b6c7aa,0xd62f105d,0x02441453,0xd8a1e681,0xe7d3fbc8,
+  0x21e1cde6,0xc33707d6,0xf4d50d87,0x455a14ed,0xa9e3e905,0xfcefa3f8,0x676f02d9,0x8d2a4c8a,
+  0xfffa3942,0x8771f681,0x6d9d6122,0xfde5380c,0xa4beea44,0x4bdecfa9,0xf6bb4b60,0xbebfbc70,
+  0x289b7ec6,0xeaa127fa,0xd4ef3085,0x04881d05,0xd9d4d039,0xe6db99e5,0x1fa27cf8,0xc4ac5665,
+  0xf4292244,0x432aff97,0xab9423a7,0xfc93a039,0x655b59c3,0x8f0ccc92,0xffeff47d,0x85845dd1,
+  0x6fa87e4f,0xfe2ce6e0,0xa3014314,0x4e0811a1,0xf7537e82,0xbd3af235,0x2ad7d2bb,0xeb86d391
+]);
+const MD5_S = [
+  7,12,17,22,7,12,17,22,7,12,17,22,7,12,17,22,
+  5,9,14,20,5,9,14,20,5,9,14,20,5,9,14,20,
+  4,11,16,23,4,11,16,23,4,11,16,23,4,11,16,23,
+  6,10,15,21,6,10,15,21,6,10,15,21,6,10,15,21
+];
+const rotl32 = (x, c) => ((x << c) | (x >>> (32 - c))) >>> 0;
+
+function md5(bytes) {
+  const len = bytes.length;
+  const total = ((len + 9 + 63) & ~63);
+  const buf = new Uint8Array(total);
+  buf.set(bytes);
+  buf[len] = 0x80;
+  const dv = new DataView(buf.buffer);
+  const bits = len * 8;
+  dv.setUint32(total - 8, bits >>> 0, true);
+  dv.setUint32(total - 4, Math.floor(bits / 4294967296), true);
+
+  let a0 = 0x67452301, b0 = 0xefcdab89, c0 = 0x98badcfe, d0 = 0x10325476;
+  const M = new Uint32Array(16);
+
+  for (let off = 0; off < total; off += 64) {
+    for (let i = 0; i < 16; i++) M[i] = dv.getUint32(off + i * 4, true);
+    let A = a0, B = b0, C = c0, D = d0;
+    for (let i = 0; i < 64; i++) {
+      let F, g;
+      if (i < 16)      { F = (B & C) | (~B & D);      g = i; }
+      else if (i < 32) { F = (D & B) | (~D & C);      g = (5 * i + 1) % 16; }
+      else if (i < 48) { F = B ^ C ^ D;               g = (3 * i + 5) % 16; }
+      else             { F = C ^ (B | ~D);            g = (7 * i) % 16; }
+      F = (F + A + MD5_K[i] + M[g]) >>> 0;
+      A = D; D = C; C = B;
+      B = (B + rotl32(F, MD5_S[i])) >>> 0;
+    }
+    a0 = (a0 + A) >>> 0; b0 = (b0 + B) >>> 0;
+    c0 = (c0 + C) >>> 0; d0 = (d0 + D) >>> 0;
+  }
+
+  const out = new Uint8Array(16);
+  const odv = new DataView(out.buffer);
+  odv.setUint32(0, a0, true);
+  odv.setUint32(4, b0, true);
+  odv.setUint32(8, c0, true);
+  odv.setUint32(12, d0, true);
+  return out;
+}
+
+/* ============================================================
+   SHA-3 / Keccak-f[1600]  (FIPS 202)
+   ============================================================ */
+const MASK64 = (1n << 64n) - 1n;
+const KECCAK_RC = [
+  0x0000000000000001n,0x0000000000008082n,0x800000000000808an,0x8000000080008000n,
+  0x000000000000808bn,0x0000000080000001n,0x8000000080008081n,0x8000000000008009n,
+  0x000000000000008an,0x0000000000000088n,0x0000000080008009n,0x000000008000000an,
+  0x000000008000808bn,0x800000000000008bn,0x8000000000008089n,0x8000000000008003n,
+  0x8000000000008002n,0x8000000000000080n,0x000000000000800an,0x800000008000000an,
+  0x8000000080008081n,0x8000000000008080n,0x0000000080000001n,0x8000000080008008n
+];
+const KECCAK_ROT = [
+   0, 1,62,28,27,
+  36,44, 6,55,20,
+   3,10,43,25,39,
+  41,45,15,21, 8,
+  18, 2,61,56,14
+];
+
+function rotl64(v, n) {
+  if (n === 0) return v & MASK64;
+  const k = BigInt(n);
+  return ((v << k) | (v >> (64n - k))) & MASK64;
+}
+
+function keccakF(A) {
+  const C = new Array(5);
+  const B = new Array(25);
+  for (let r = 0; r < 24; r++) {
+    for (let x = 0; x < 5; x++) C[x] = A[x] ^ A[x + 5] ^ A[x + 10] ^ A[x + 15] ^ A[x + 20];
+    for (let x = 0; x < 5; x++) {
+      const d = C[(x + 4) % 5] ^ rotl64(C[(x + 1) % 5], 1);
+      for (let y = 0; y < 5; y++) A[x + 5 * y] ^= d;
+    }
+    for (let x = 0; x < 5; x++) {
+      for (let y = 0; y < 5; y++) {
+        B[y + 5 * ((2 * x + 3 * y) % 5)] = rotl64(A[x + 5 * y], KECCAK_ROT[x + 5 * y]);
+      }
+    }
+    for (let y = 0; y < 5; y++) {
+      for (let x = 0; x < 5; x++) {
+        A[x + 5 * y] = B[x + 5 * y] ^ ((~B[(x + 1) % 5 + 5 * y] & MASK64) & B[(x + 2) % 5 + 5 * y]);
+      }
+    }
+    A[0] ^= KECCAK_RC[r];
+  }
+}
+
+function keccak(msg, outBytes, rateBytes) {
+  const A = new Array(25).fill(0n);
+
+  const padLen = rateBytes - (msg.length % rateBytes);
+  const padded = new Uint8Array(msg.length + padLen);
+  padded.set(msg);
+  padded[msg.length] ^= 0x06;
+  padded[padded.length - 1] ^= 0x80;
+
+  const lanes = rateBytes / 8;
+  for (let off = 0; off < padded.length; off += rateBytes) {
+    for (let i = 0; i < lanes; i++) {
+      let lane = 0n;
+      for (let j = 7; j >= 0; j--) lane = (lane << 8n) | BigInt(padded[off + i * 8 + j]);
+      A[i] ^= lane;
+    }
+    keccakF(A);
+  }
+
+  const out = new Uint8Array(outBytes);
+  let pos = 0;
+  while (true) {
+    for (let i = 0; i < lanes && pos < outBytes; i++) {
+      let lane = A[i];
+      for (let j = 0; j < 8 && pos < outBytes; j++) {
+        out[pos++] = Number(lane & 0xffn);
+        lane >>= 8n;
+      }
+    }
+    if (pos >= outBytes) break;
+    keccakF(A);
+  }
+  return out;
+}
+
+const sha3_256 = b => keccak(b, 32, 136);
+const sha3_512 = b => keccak(b, 64, 72);
+
+/* ============================================================
+   Web Crypto
+   ============================================================ */
+async function wc(name, bytes) {
+  const d = await crypto.subtle.digest(name, bytes);
+  return new Uint8Array(d);
+}
+
+/* ============================================================
+   algorithm registry
+   ============================================================ */
+const ALGOS = [
+  {
+    id: 'md5', name: 'MD5', bits: 128, status: 'broken', tag: 'broken',
+    run: async b => md5(b),
+    info: {
+      lede: 'Fast, tiny, and completely broken for anything an attacker can touch. It survives only as a file-copy checksum.',
+      specs: [['Output','128 bits · 16 bytes · 32 hex chars'],['Published','1992, RFC 1321'],['Construction','Merkle–Damgård'],['Status','Broken — collisions in seconds']],
+      features: [
+        'The smallest digest on this list — 16 bytes, 32 hex characters',
+        'Very fast in pure software; needs no special CPU instructions',
+        'Collisions are cheap to generate, and chosen-prefix collisions take seconds on a laptop',
+        'Preimage resistance is still around 2^128, which stops mattering once collisions are free'
+      ],
+      use: 'Non-adversarial checksums — did this download arrive intact?',
+      avoid: 'Signatures, certificates, tamper detection, password storage.'
+    }
+  },
+  {
+    id: 'sha1', name: 'SHA-1', bits: 160, status: 'deprecated', tag: 'deprecated',
+    run: async b => wc('SHA-1', b),
+    info: {
+      lede: 'MD5\'s replacement, now retired itself. The 2017 SHAttered attack produced two different PDFs with the same SHA-1 digest.',
+      specs: [['Output','160 bits · 20 bytes · 40 hex chars'],['Published','1995, FIPS 180-1'],['Construction','Merkle–Damgård'],['Status','Deprecated since 2011, collisions shown 2017']],
+      features: [
+        '160-bit digest — 40 hex characters',
+        'Practical collision attacks exist; certificate authorities stopped issuing SHA-1 certificates in 2016',
+        'Still tolerable inside HMAC in legacy protocols, where collision resistance is not the property being relied on',
+        'No reason to choose it for anything new'
+      ],
+      use: 'Reading systems that already use it.',
+      avoid: 'Anything you are designing today.'
+    }
+  },
+  {
+    id: 'sha256', name: 'SHA-256', bits: 256, status: 'current', tag: 'standard',
+    run: async b => wc('SHA-256', b),
+    info: {
+      lede: 'The default answer. Part of SHA-2, published by NIST in 2001, and still standing after two decades of attack.',
+      specs: [['Output','256 bits · 32 bytes · 64 hex chars'],['Published','2001, FIPS 180-4'],['Construction','Merkle–Damgård'],['Status','Current standard']],
+      features: [
+        '256-bit digest; about 2^128 work for a birthday collision',
+        'Hardware-accelerated on most modern CPUs — SHA extensions on x86, crypto extensions on ARMv8',
+        'Supported by every language and platform you are likely to use',
+        'Merkle–Damgård construction, so it is vulnerable to length extension when used naively as a MAC — use HMAC instead'
+      ],
+      use: 'Signatures, file integrity, Merkle trees, HMAC, blockchain.',
+      avoid: 'Storing passwords directly. It is far too fast.'
+    }
+  },
+  {
+    id: 'sha384', name: 'SHA-384', bits: 384, status: 'current', tag: 'current',
+    run: async b => wc('SHA-384', b),
+    info: {
+      lede: 'SHA-512 with a different starting state, truncated to 384 bits. A common pick in TLS and in government profiles.',
+      specs: [['Output','384 bits · 48 bytes · 96 hex chars'],['Published','2001, FIPS 180-4'],['Construction','Merkle–Damgård (64-bit core)'],['Status','Current']],
+      features: [
+        '384-bit digest — 96 hex characters',
+        'Built on the same 64-bit core as SHA-512, so it is often faster than SHA-256 on 64-bit hardware',
+        'Required by some high-assurance profiles that mandate a minimum digest size',
+        'Same length-extension caveat as the rest of SHA-2'
+      ],
+      use: 'TLS, high-assurance systems, anywhere a 256-bit tag feels thin.',
+      avoid: 'Nothing in particular. It is simply larger than most work needs.'
+    }
+  },
+  {
+    id: 'sha512', name: 'SHA-512', bits: 512, status: 'current', tag: 'current',
+    run: async b => wc('SHA-512', b),
+    info: {
+      lede: 'The widest SHA-2. On 64-bit hardware it frequently beats SHA-256 despite producing twice as much output.',
+      specs: [['Output','512 bits · 64 bytes · 128 hex chars'],['Published','2001, FIPS 180-4'],['Construction','Merkle–Damgård (64-bit core)'],['Status','Current']],
+      features: [
+        '512-bit digest — 128 hex characters',
+        'Operates on 64-bit words, which suits x86-64 and ARM64 better than SHA-256\'s 32-bit words',
+        'Can be truncated safely if you need a shorter tag',
+        'Large output makes it a natural choice for long-lived signatures'
+      ],
+      use: 'Long-lived signatures, large-file integrity, 64-bit servers.',
+      avoid: 'Storing passwords directly — same problem as SHA-256, just wider.'
+    }
+  },
+  {
+    id: 'sha3_256', name: 'SHA3-256', bits: 256, status: 'current', tag: 'alt',
+    run: async b => sha3_256(b),
+    info: {
+      lede: 'Keccak, chosen by NIST in 2012 as a structurally different backup plan to SHA-2. Not an upgrade — a second opinion.',
+      specs: [['Output','256 bits · 32 bytes · 64 hex chars'],['Published','2015, FIPS 202'],['Construction','Sponge — Keccak-f[1600], rate 136 bytes'],['Status','Current standard']],
+      features: [
+        'Sponge construction, so there is no Merkle–Damgård padding and no length-extension weakness',
+        'Completely different design lineage from SHA-2 — a break in one family does not touch the other',
+        'Same 256-bit output as SHA-256, but produces a different digest for the same input',
+        'Slower than SHA-256 in most software implementations, since hardware support is still spreading'
+      ],
+      use: 'Defence in depth, and new protocols that want a non-SHA-2 option.',
+      avoid: 'Assuming it replaces SHA-256. It runs alongside it.'
+    }
+  },
+  {
+    id: 'sha3_512', name: 'SHA3-512', bits: 512, status: 'current', tag: 'alt',
+    run: async b => sha3_512(b),
+    info: {
+      lede: 'The sponge construction at 512 bits. The same structural independence from SHA-2, with more output margin.',
+      specs: [['Output','512 bits · 64 bytes · 128 hex chars'],['Published','2015, FIPS 202'],['Construction','Sponge — Keccak-f[1600], rate 72 bytes'],['Status','Current standard']],
+      features: [
+        '512-bit digest — 128 hex characters',
+        'Same sponge design as SHA3-256, with a smaller rate and a larger capacity',
+        'Immune to the length-extension weakness that affects the SHA-2 family',
+        'Noticeably slower than SHA3-256 and SHA-512 in software'
+      ],
+      use: 'Long-horizon integrity and any protocol already standardised on SHA-3.',
+      avoid: 'Choosing it purely because the number is bigger.'
+    }
+  }
+];
+
+const NEEDS_SUBTLE = { sha1: 1, sha256: 1, sha384: 1, sha512: 1 };
+
+/* ============================================================
+   state
+   ============================================================ */
+const state = { algo: 'sha256' };
+let seq = 0;
+
+const inputEl   = $('#input');
+const listEl    = $('#algolist');
+const infoEl    = $('#info');
+const infoBtn   = $('#infoBtn');
+const infoPanel = $('#infoPanel');
+const infoLabel = $('#infoLabel');
+const bytegrid  = $('#bytegrid');
+const hexout    = $('#hexout');
+const outName   = $('#outName');
+const outMeta   = $('#outMeta');
+const counter   = $('#counter');
+const copyBtn   = $('#copyBtn');
+const clearBtn  = $('#clearBtn');
+const avBtn     = $('#avBtn');
+const avBody    = $('#avBody');
+const avGrid    = $('#avGrid');
+const avNote    = $('#avNote');
+const avFlip    = $('#avFlip');
+
+const meta = a => a.bits + ' bits · ' + (a.bits / 8) + ' bytes · ' + (a.bits / 4) + ' hex chars';
+
+/* ============================================================
+   build the picker
+   ============================================================ */
+function buildPicker() {
+  ALGOS.forEach(a => {
+    const label = document.createElement('label');
+    label.className = 'algo';
+    label.dataset.id = a.id;
+    label.innerHTML =
+      '<input type="radio" name="algo" value="' + a.id + '"' + (a.id === state.algo ? ' checked' : '') + '>' +
+      '<span class="dot-ind" aria-hidden="true"></span>' +
+      '<span class="algo-name">' + a.name + '</span>' +
+      '<span class="algo-tag tag-' + a.tag + '">' + a.tag + '</span>' +
+      '<span class="algo-meta">' + meta(a) + '</span>';
+    listEl.insertBefore(label, infoEl);
+    label.querySelector('input').addEventListener('change', () => select(a.id));
+  });
+  placeInfo();
+}
+
+function algoEl(id) { return listEl.querySelector('.algo[data-id="' + id + '"]'); }
+
+function placeInfo() {
+  const row = algoEl(state.algo);
+  if (row && infoEl.previousElementSibling !== row) {
+    row.parentNode.insertBefore(infoEl, row.nextSibling);
+  }
+}
+
+function select(id) {
+  state.algo = id;
+  ALGOS.forEach(a => {
+    const el = algoEl(a.id);
+    if (!el) return;
+    el.classList.toggle('is-sel', a.id === id);
+    el.querySelector('input').checked = (a.id === id);
+  });
+  const a = ALGOS.find(x => x.id === id);
+  infoLabel.textContent = 'About ' + a.name;
+  infoPanel.hidden = true;
+  infoBtn.setAttribute('aria-expanded', 'false');
+  infoPanel.innerHTML = '';
+  placeInfo();
+  update();
+}
+
+/* ============================================================
+   info panel
+   ============================================================ */
+infoBtn.addEventListener('click', () => {
+  const open = infoPanel.hidden;
+  if (open) {
+    const a = ALGOS.find(x => x.id === state.algo);
+    const i = a.info;
+    infoPanel.innerHTML =
+      '<p class="info-lede">' + i.lede + '</p>' +
+      '<dl class="specs">' + i.specs.map(s => '<div><dt>' + s[0] + '</dt><dd>' + s[1] + '</dd></div>').join('') + '</dl>' +
+      '<h4>What it gives you</h4>' +
+      '<ul class="feat">' + i.features.map(f => '<li>' + f + '</li>').join('') + '</ul>' +
+      '<p class="info-foot"><b>Use it for</b><br>' + i.use + '</p>' +
+      '<p class="info-foot"><b>Don\'t use it for</b><br>' + i.avoid + '</p>';
+  }
+  infoPanel.hidden = !open;
+  infoBtn.setAttribute('aria-expanded', String(open));
+});
+
+/* ============================================================
+   rendering
+   ============================================================ */
+function renderGrid(el, bytes, diffMask) {
+  const frag = document.createDocumentFragment();
+  for (let i = 0; i < bytes.length; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'byte' + (diffMask && diffMask[i] ? ' diff' : '');
+    cell.style.setProperty('--t', (bytes[i] / 255).toFixed(3));
+    cell.style.setProperty('--i', Math.min(i, 40));
+    const s = document.createElement('span');
+    s.textContent = bytes[i].toString(16).padStart(2, '0');
+    cell.appendChild(s);
+    frag.appendChild(cell);
+  }
+  el.textContent = '';
+  el.appendChild(frag);
+}
+
+function updateCounter() {
+  const v = inputEl.value;
+  const bytes = enc.encode(v).length;
+  counter.textContent = v.length + (v.length === 1 ? ' character' : ' characters') + ' · ' + bytes + (bytes === 1 ? ' byte' : ' bytes');
+  counter.style.color = bytes > 0 ? 'var(--ink-2)' : 'var(--muted)';
+}
+
+let currentHex = '';
+
+async function update() {
+  const my = ++seq;
+  const a = ALGOS.find(x => x.id === state.algo);
+  const bytes = enc.encode(inputEl.value);
+
+  outName.textContent = a.name;
+  outMeta.textContent = meta(a);
+
+  let digest;
+  try {
+    digest = await a.run(bytes);
+  } catch (err) {
+    hexout.textContent = 'Unavailable: ' + err.message;
+    bytegrid.textContent = '';
+    return;
+  }
+  if (my !== seq) return;
+
+  currentHex = toHex(digest);
+  renderGrid(bytegrid, digest, null);
+  hexout.textContent = currentHex;
+
+  updateAvalanche(my, a, bytes);
+}
+
+async function updateAvalanche(my, a, bytes) {
+  if (avBody.hidden) return;
+  if (!bytes.length) {
+    avGrid.textContent = '';
+    avFlip.textContent = '';
+    avNote.textContent = 'Type something first — there is no bit to flip in an empty input.';
+    return;
+  }
+  const flipped = Uint8Array.from(bytes);
+  const idx = flipped.length - 1;
+  const before = flipped[idx];
+  flipped[idx] ^= 0x01;
+  const after = flipped[idx];
+
+  let d2;
+  try { d2 = await a.run(flipped); } catch (e) { return; }
+  if (my !== seq) return;
+
+  const d1 = await a.run(bytes);
+  if (my !== seq) return;
+
+  const mask = new Array(d1.length);
+  let diffBytes = 0, diffBits = 0;
+  for (let i = 0; i < d1.length; i++) {
+    const x = d1[i] ^ d2[i];
+    mask[i] = x !== 0;
+    if (x) { diffBytes++; diffBits += popcount(x); }
+  }
+
+  renderGrid(avGrid, d2, mask);
+  avFlip.textContent = 'Flipped bit 0 of input byte #' + idx + ' (0x' + before.toString(16).padStart(2, '0') + ' → 0x' + after.toString(16).padStart(2, '0') + ').';
+  const totalBits = d1.length * 8;
+  const pct = (100 * diffBits / totalBits).toFixed(1);
+  avNote.innerHTML = '<b>' + diffBits + ' of ' + totalBits + ' bits differ (' + pct + '%)</b>, across ' + diffBytes + ' of ' + d1.length + ' bytes. A good hash lands near 50% — that is the avalanche effect, and it is why the output tells an attacker nothing about the input.';
+}
+
+/* ============================================================
+   bench wiring
+   ============================================================ */
+let debounce;
+inputEl.addEventListener('input', () => {
+  updateCounter();
+  clearTimeout(debounce);
+  debounce = setTimeout(update, 110);
+});
+
+clearBtn.addEventListener('click', () => {
+  inputEl.value = '';
+  updateCounter();
+  update();
+  inputEl.focus();
+});
+
+copyBtn.addEventListener('click', async () => {
+  if (!currentHex) return;
+  try {
+    await navigator.clipboard.writeText(currentHex);
+    const old = copyBtn.textContent;
+    copyBtn.textContent = 'Copied';
+    copyBtn.classList.add('said');
+    setTimeout(() => { copyBtn.textContent = old; copyBtn.classList.remove('said'); }, 1200);
+  } catch (e) {
+    copyBtn.textContent = 'Copy failed';
+  }
+});
+
+avBtn.addEventListener('click', () => {
+  const open = avBody.hidden;
+  avBody.hidden = !open;
+  avBtn.setAttribute('aria-expanded', String(open));
+  avBtn.textContent = open ? 'Hide avalanche' : 'Show avalanche';
+  if (open) update();
+});
+
+document.addEventListener('keydown', e => {
+  const tag = (e.target.tagName || '').toLowerCase();
+  const typing = tag === 'input' || tag === 'textarea' || tag === 'select';
+  if (e.key === '/' && !typing) { e.preventDefault(); inputEl.focus(); }
+  if (e.key === 'Escape' && typing) e.target.blur();
+});
+
+/* ============================================================
+   password vault
+   ============================================================ */
+const pwEl    = $('#pw');
+const itersEl = $('#iters');
+const pwBtn   = $('#pwBtn');
+const badRows = $('#badRows');
+const okRows  = $('#okRows');
+const badFoot = $('#badFoot');
+const okFoot  = $('#okFoot');
+const cryptoNotice = $('#cryptoNotice');
+
+function row(user, value, cls) {
+  return '<div class="row' + (cls ? ' ' + cls : '') + '">' +
+         '<span class="row-user">' + user + '</span>' +
+         '<code class="row-hash">' + value + '</code></div>';
+}
+
+async function derivePBKDF2(password, salt, iterations) {
+  const key = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', salt: salt, iterations: iterations, hash: 'SHA-256' },
+    key, 256
+  );
+  return new Uint8Array(bits);
+}
+
+async function measureSha256(rounds) {
+  const b = enc.encode('benchmark');
+  const t0 = performance.now();
+  for (let i = 0; i < rounds; i++) await crypto.subtle.digest('SHA-256', b);
+  return (performance.now() - t0) / rounds;
+}
+
+async function runVault() {
+  if (!hasSubtle) {
+    okRows.innerHTML = row('alice', 'Web Crypto unavailable') + row('bob', 'serve over https or localhost');
+    return;
+  }
+  const password = pwEl.value;
+  const iterations = parseInt(itersEl.value, 10);
+
+  pwBtn.disabled = true;
+  pwBtn.textContent = 'Working…';
+
+  try {
+    // --- the wrong way: unsalted SHA-256 ---
+    const plain = await crypto.subtle.digest('SHA-256', enc.encode(password));
+    const plainHex = toHex(new Uint8Array(plain));
+    badRows.innerHTML =
+      row('alice', plainHex, 'same') +
+      row('bob', plainHex, 'same');
+
+    // --- the right way: PBKDF2 with a fresh salt per user ---
+    const saltA = crypto.getRandomValues(new Uint8Array(16));
+    const saltB = crypto.getRandomValues(new Uint8Array(16));
+
+    const t0 = performance.now();
+    const hashA = await derivePBKDF2(password, saltA, iterations);
+    const t1 = performance.now();
+    const hashB = await derivePBKDF2(password, saltB, iterations);
+    const t2 = performance.now();
+
+    const recA = 'pbkdf2_sha256$' + iterations + '$' + b64(saltA) + '$' + b64(hashA);
+    const recB = 'pbkdf2_sha256$' + iterations + '$' + b64(saltB) + '$' + b64(hashB);
+    okRows.innerHTML = row('alice', recA) + row('bob', recB);
+
+    // --- real measurements, taken here ---
+    const shaMs = await measureSha256(400);
+    const pbMs = t1 - t0;
+    const ratio = Math.round(pbMs / shaMs);
+
+    badFoot.textContent = 'Measured here: ≈ ' + shaMs.toFixed(4) + ' ms per guess. That is ' +
+      Math.round(1000 / shaMs).toLocaleString() + ' guesses per second, per core, on this machine.';
+    okFoot.textContent = 'Measured here: ' + pbMs.toFixed(0) + ' ms for alice, ' + (t2 - t1).toFixed(0) +
+      ' ms for bob — the salt makes them different. That is roughly ' + ratio.toLocaleString() +
+      '× slower per guess than plain SHA-256, and a GPU would widen the gap in the attacker\'s favour.';
+  } catch (err) {
+    okRows.innerHTML = row('error', String(err.message || err));
+  } finally {
+    pwBtn.disabled = false;
+    pwBtn.textContent = 'Store both ways';
+  }
+}
+
+pwBtn.addEventListener('click', runVault);
+pwEl.addEventListener('keydown', e => { if (e.key === 'Enter') runVault(); });
+
+/* ============================================================
+   reveal choreography
+   ============================================================ */
+function setupReveals() {
+  if (reduceMotion || !('IntersectionObserver' in window)) {
+    document.querySelectorAll('[data-reveal]').forEach(el => el.classList.add('in'));
+    return;
+  }
+
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.classList.add('in');
+        io.unobserve(e.target);
+      }
+    });
+  }, { rootMargin: '0px 0px -8% 0px', threshold: 0.06 });
+
+  // single elements
+  document.querySelectorAll('[data-reveal]').forEach(el => io.observe(el));
+
+  // staggered containers — children get their own reveal + delay
+  document.querySelectorAll('[data-reveal-stagger]').forEach(parent => {
+    const kids = Array.from(parent.children);
+    kids.forEach((k, i) => {
+      if (k.hasAttribute('data-reveal')) return;
+      k.setAttribute('data-reveal', '');
+      k.style.setProperty('--rd', (i * 70) + 'ms');
+      io.observe(k);
+    });
+  });
+}
+
+/* ============================================================
+   cursor-following light
+   ============================================================ */
+function setupGlow() {
+  if (reduceMotion) return;
+  document.querySelectorAll('.glow').forEach(el => {
+    let mx = 0, my = 0, queued = false;
+    el.addEventListener('pointermove', (e) => {
+      const r = el.getBoundingClientRect();
+      mx = e.clientX - r.left;
+      my = e.clientY - r.top;
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => {
+        el.style.setProperty('--mx', mx + 'px');
+        el.style.setProperty('--my', my + 'px');
+        queued = false;
+      });
+    });
+  });
+}
+
+/* ============================================================
+   boot: self-test every implementation before trusting it
+   ============================================================ */
+const VECTORS = {
+  md5:      '900150983cd24fb0d6963f7d28e17f72',
+  sha1:     'a9993e364706816aba3e25717850c26c9cd0d89d',
+  sha256:   'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+  sha384:   'cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b605a43ff5bed8086072ba1e7cc2358baeca134c825a7',
+  sha512:   'ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f',
+  sha3_256: '3a985da74fe225b2045c172d6bd390bd855f086e3e9d525b46bfe24511431532',
+  sha3_512: 'b751850b1a57168a5693cd924b6b096e08f621827444f70d884f5d0240d2712e10e116e9192af3c91a7ec57647e3934057340b4cf408d5a56592f8274eec53f0'
+};
+
+async function boot() {
+  buildPicker();
+  updateCounter();
+
+  const abc = enc.encode('abc');
+  const failed = [];
+
+  for (const a of ALGOS) {
+    if (NEEDS_SUBTLE[a.id] && !hasSubtle) { failed.push(a.id); continue; }
+    try {
+      const got = toHex(await a.run(abc));
+      if (got !== VECTORS[a.id]) failed.push(a.id);
+    } catch (e) {
+      failed.push(a.id);
+    }
+  }
+
+  failed.forEach(id => {
+    const el = algoEl(id);
+    if (!el) return;
+    el.classList.add('is-off');
+    el.querySelector('input').disabled = true;
+    const tag = el.querySelector('.algo-tag');
+    tag.textContent = 'unavailable';
+    tag.className = 'algo-tag tag-deprecated';
+    el.querySelector('.algo-meta').textContent = hasSubtle
+      ? 'failed its test vector in this browser'
+      : 'needs https or localhost';
+  });
+
+  if (!hasSubtle) {
+    cryptoNotice.innerHTML = '<p class="notice">Web Crypto is not available here, so SHA-1 and the SHA-2 family are switched off. Open this page over https:// or on localhost. MD5 and SHA-3 are pure JavaScript and still work.</p>';
+  }
+
+  if (failed.indexOf(state.algo) !== -1) {
+    const next = ALGOS.find(a => failed.indexOf(a.id) === -1);
+    state.algo = next ? next.id : 'md5';
+  }
+
+  select(state.algo);
+  if (hasSubtle) runVault();
+  else runVault();
+
+  // animations last so the DOM is stable
+  setupReveals();
+  setupGlow();
+}
+
+boot();
+
+})();
+</script>
+</body>
+</html>

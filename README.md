@@ -55,7 +55,7 @@ Each one has an info button under its row in the picker — click it for constru
 **Mohamed Mousa**
 
 - GitHub: [el-mla7](https://github.com/el-mla7)
-- LinkedIn: [mohammed-mousaa](www.linkedin.com/in/mohammed-mousa-97b03931b)
+- LinkedIn: www.linkedin.com/in/mohammed-mousa-97b03931b
 - Email: mohammed.mousa.dev@gmail.com
 
 ---

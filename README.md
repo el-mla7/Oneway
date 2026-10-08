@@ -1,8 +1,4 @@
-# Assignment
-Some times you find urself working on things you dont really specialize at doing...
-In this repo iam storing assignments. things i didnt specialize at doing, yet did it one way or another.
-
-Oneway is a website that turns ur password into a hash via a veracity of hashing functions.
+# Oneway
 
 A single HTML file that runs seven cryptographic hash functions in your browser. Type anything, pick a function, watch the digest change byte by byte. Flip one input bit and see how much of the output moves.
 
@@ -10,7 +6,7 @@ No build step. No dependencies. No network calls. Nothing you type leaves the ta
 
 Built as a course assignment for a cybersecurity module.
 
-Live: `https://el-mla7.github.io/oneway` 
+Live: `https://el-mla7.github.io/Oneway/` 
 
 ---
 

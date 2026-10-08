@@ -1,2 +1,3 @@
 # Assignments
 Some times you find urself working on things you dont really specialize at doing...
+In this repo iam storing assignments. things i didnt specialize at doing, yet did it one way on another.

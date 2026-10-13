@@ -43,7 +43,7 @@ body{
    reveal choreography
    ============================================================ */
 [data-reveal]{
-  opacity:0;transform:translateY(22px);
+  opacity:0;transform:translateY(var(--reveal-y, 22px));
   transition:opacity .85s var(--ease),transform .85s var(--ease);
   transition-delay:var(--rd,0ms);
   will-change:opacity,transform;
@@ -68,7 +68,7 @@ body{
   background:radial-gradient(440px circle at var(--mx) var(--my),rgba(210,69,30,.10),transparent 62%);
   opacity:0;transition:opacity .45s ease;
 }
-.glow:hover::before{opacity:1}
+.glow:hover::before,.glow.is-lit::before{opacity:1}
 .glow > *{position:relative;z-index:1}
 
 /* ============================================================
@@ -84,10 +84,11 @@ body{
 .wordmark{
   display:flex;align-items:center;gap:8px;text-decoration:none;color:var(--ink);
   font-family:var(--font-mono);font-size:15px;font-weight:600;letter-spacing:-.02em;
+  flex:0 0 auto;
 }
 .wordmark svg{width:20px;height:20px;color:var(--accent);flex:none;transition:transform .35s var(--ease)}
 .wordmark:hover svg{transform:translateX(4px)}
-.topnav{display:flex;gap:18px;margin-left:auto}
+.topnav{display:flex;gap:18px;margin-left:auto;min-width:0}
 .topnav a{
   font-family:var(--font-mono);font-size:12.5px;color:var(--muted);text-decoration:none;
   padding-bottom:2px;border-bottom:1px solid transparent;
@@ -99,7 +100,18 @@ kbd{
   font-family:var(--font-mono);font-size:11px;border:1px solid var(--line-2);
   border-bottom-width:2px;border-radius:3px;padding:1px 5px;background:var(--paper-2);color:var(--ink-2);
 }
-@media(max-width:720px){.topnav,.kbd-hint{display:none}}
+@media(max-width:720px){
+  .kbd-hint{display:none}
+  .topbar-in{gap:12px}
+  .topnav{
+    gap:14px;margin-left:auto;
+    overflow-x:auto;flex-wrap:nowrap;
+    -webkit-overflow-scrolling:touch;scrollbar-width:none;
+    padding-bottom:2px;
+  }
+  .topnav::-webkit-scrollbar{display:none}
+  .topnav a{flex:0 0 auto;font-size:12px}
+}
 
 /* ============================================================
    hero
@@ -108,7 +120,6 @@ kbd{
   position:relative;overflow:hidden;
   padding:80px 0 56px;border-bottom:1px solid var(--line);
 }
-/* drifting hex glyphs in the background */
 .hero-drift{position:absolute;inset:0;pointer-events:none;z-index:1;overflow:hidden}
 .hero-drift span{
   position:absolute;left:var(--x);top:var(--y);
@@ -121,7 +132,6 @@ kbd{
   0%,100%{transform:translate(0,0)}
   50%{transform:translate(8px,-16px)}
 }
-/* slow drifting dot grid */
 .hero-dots{
   position:absolute;inset:-40px;pointer-events:none;z-index:0;
   background-image:radial-gradient(circle,rgba(22,21,15,.10) 1px,transparent 1px);
@@ -304,6 +314,18 @@ textarea{min-height:104px}
 .btn.ghost:hover{background:var(--paper-2)}
 .btn[disabled]{opacity:.4;cursor:not-allowed}
 .btn.said{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.small{font-size:11.5px;padding:7px 11px}
+
+/* save form */
+.saveform{
+  margin-top:10px;padding:14px;
+  border:1px dashed var(--line-2);border-radius:var(--r);
+  background:var(--paper-2);
+  animation:drop .25s var(--ease) both;
+}
+.saveform .field{margin-bottom:6px}
+.saveform input{margin-bottom:10px}
+.saveform-btns{display:flex;gap:8px;flex-wrap:wrap}
 
 /* avalanche */
 .avalanche{margin-top:34px;border-top:1px solid var(--line);padding-top:22px}
@@ -311,6 +333,39 @@ textarea{min-height:104px}
 .av-note{font-size:13px;color:var(--ink-2);margin:14px 0 0;line-height:1.55}
 .av-note b{font-family:var(--font-mono);color:var(--ink);font-weight:600}
 .av-flip{font-family:var(--font-mono);font-size:12px;color:var(--muted);margin:14px 0 0}
+
+/* ============================================================
+   hash store
+   ============================================================ */
+.storelist{display:grid;gap:10px;margin-top:22px}
+.store-empty{
+  padding:22px;border:1px dashed var(--line-2);border-radius:var(--r);
+  font-family:var(--font-mono);font-size:12.5px;color:var(--muted);
+  text-align:center;margin-top:22px;
+}
+.storeitem{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:14px;
+  border:1px solid var(--line);
+  border-radius:var(--r);
+  padding:14px 16px;
+  background:var(--paper);
+  transition:border-color .18s ease,background .18s ease,transform .2s var(--ease);
+  animation:drop .28s var(--ease) both;
+}
+.storeitem:hover{border-color:var(--line-2);background:var(--paper-2)}
+.store-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px}
+.store-label{font-family:var(--font-mono);font-size:13.5px;font-weight:600;letter-spacing:-.01em;word-break:break-word}
+.store-tag{
+  font-family:var(--font-mono);font-size:10px;text-transform:uppercase;
+  letter-spacing:.09em;padding:2px 8px;border-radius:999px;border:1px solid currentColor;
+  white-space:nowrap;
+}
+.store-hex{font-family:var(--font-mono);font-size:11.5px;line-height:1.55;word-break:break-all;color:var(--ink-2)}
+.store-meta{font-family:var(--font-mono);font-size:11px;color:var(--muted);margin-top:8px}
+.store-btns{display:flex;gap:6px;flex-wrap:wrap;align-items:flex-start}
+.store-actions{display:flex;gap:8px;margin-top:22px;flex-wrap:wrap}
 
 /* ============================================================
    pull quote
@@ -463,6 +518,50 @@ footer a:hover{color:var(--ink);border-bottom-color:var(--ink)}
 }
 
 /* ============================================================
+   mobile tightening
+   ============================================================ */
+@media(max-width:640px){
+  .section{padding:48px 0}
+  .hero{padding:56px 0 44px}
+  .hero h1{font-size:clamp(34px,10vw,52px)}
+  .hero p{font-size:16px}
+  .pullquote{padding:52px 0}
+  [data-reveal]{--reveal-y:12px}
+  .btn{padding:11px 15px;min-height:44px;display:inline-flex;align-items:center;justify-content:center}
+  .info-btn{padding:12px 13px;min-height:44px}
+  select{padding:12px 11px;min-height:44px}
+  .social{width:48px;height:48px}
+  .store-actions .btn{flex:1 1 auto}
+}
+@media(max-width:560px){
+  .algo{
+    grid-template-columns:14px minmax(0,1fr);
+    grid-template-areas:
+      "dot name"
+      "dot tag"
+      "dot meta";
+    gap:2px 10px;
+    padding:12px;
+    min-height:52px;
+  }
+  .algo-tag{justify-self:start;margin-top:3px}
+  .algo-meta{margin-top:2px}
+  .algo.is-sel,.algo:hover{transform:none}
+  .bytegrid{grid-template-columns:repeat(auto-fill,minmax(30px,1fr));gap:3px}
+  .byte{font-size:11px;padding:6px 0}
+  .storeitem{grid-template-columns:1fr;gap:10px}
+  .store-btns{justify-content:flex-start}
+  .specs > div{grid-template-columns:76px minmax(0,1fr)}
+}
+@media(max-width:420px){
+  .bytegrid{grid-template-columns:repeat(auto-fill,minmax(26px,1fr))}
+  .byte{font-size:10px;padding:5px 0}
+  .btnrow{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .btnrow .btn{width:100%}
+  #clearBtn{grid-column:1 / -1}
+}
+
+/* ============================================================
    reduced motion
    ============================================================ */
 @media (prefers-reduced-motion: reduce){
@@ -489,6 +588,7 @@ footer a:hover{color:var(--ink);border-bottom-color:var(--ink)}
     </a>
     <nav class="topnav">
       <a href="#bench">Bench</a>
+      <a href="#store">Shelf</a>
       <a href="#vault">Passwords</a>
       <a href="#reference">Reference</a>
     </nav>
@@ -539,7 +639,6 @@ footer a:hover{color:var(--ink);border-bottom-color:var(--ink)}
       <div class="picker">
         <p class="eyebrow" style="margin-top:34px" data-reveal style="--rd:240ms">02 — the function</p>
         <div class="algolist" id="algolist" data-reveal-stagger>
-          <!-- rows injected by script; the info block is moved under the selected row -->
           <div class="info" id="info">
             <button class="info-btn" id="infoBtn" aria-expanded="false" aria-controls="infoPanel">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -564,7 +663,17 @@ footer a:hover{color:var(--ink);border-bottom-color:var(--ink)}
       <div class="hexout" id="hexout" data-reveal style="--rd:240ms">—</div>
       <div class="btnrow" data-reveal style="--rd:320ms">
         <button class="btn" id="copyBtn">Copy hex</button>
+        <button class="btn" id="saveBtn">Save hash</button>
         <button class="btn ghost" id="clearBtn">Clear input</button>
+      </div>
+
+      <div class="saveform" id="saveForm" hidden>
+        <label class="field" for="saveLabel">Label this hash</label>
+        <input id="saveLabel" type="text" maxlength="80" placeholder="e.g. resume-v3 checksum" autocomplete="off" spellcheck="false">
+        <div class="saveform-btns">
+          <button class="btn" id="saveConfirm">Save</button>
+          <button class="btn ghost" id="saveCancel">Cancel</button>
+        </div>
       </div>
 
       <div class="avalanche" data-reveal style="--rd:400ms">
@@ -583,6 +692,20 @@ footer a:hover{color:var(--ink);border-bottom-color:var(--ink)}
   </div>
 </section>
 
+<section class="section wrap" id="store" data-od-id="store">
+  <p class="eyebrow" data-reveal>04 — the shelf</p>
+  <h2 data-reveal style="--rd:80ms">Hashes you keep</h2>
+  <p class="lede" data-reveal style="--rd:160ms">Saved hashes live in this browser's <strong>localStorage</strong>. They never leave the tab, and clearing your site data removes them. The original input is not stored — only the label, the algorithm, and the digest.</p>
+
+  <div class="storelist" id="storeList" data-reveal style="--rd:200ms"></div>
+  <div class="store-empty" id="storeEmpty">Nothing saved yet. Compute a hash above and press <strong>Save hash</strong>.</div>
+
+  <div class="store-actions" data-reveal style="--rd:260ms">
+    <button class="btn ghost" id="clearStore" disabled>Clear all</button>
+    <button class="btn ghost" id="exportStore" disabled>Export JSON</button>
+  </div>
+</section>
+
 <section class="pullquote glow" data-od-id="quote">
   <div class="wrap">
     <p data-reveal>A hash is not encryption. There is no key and nothing to decrypt, only a fingerprint you can compare.</p>
@@ -591,7 +714,7 @@ footer a:hover{color:var(--ink);border-bottom-color:var(--ink)}
 </section>
 
 <section class="section wrap" id="vault" data-od-id="vault">
-  <p class="eyebrow" data-reveal>04 — passwords</p>
+  <p class="eyebrow" data-reveal>05 — passwords</p>
   <h2 data-reveal style="--rd:80ms">Storing a password is not the same as hashing one</h2>
   <p class="lede" data-reveal style="--rd:160ms">A cryptographic hash is designed to be <em>fast</em>. That is exactly the wrong property when the thing you are protecting is a password. Below, alice and bob pick the same password — the way real users do.</p>
 
@@ -645,7 +768,7 @@ footer a:hover{color:var(--ink);border-bottom-color:var(--ink)}
 </section>
 
 <section class="section wrap" id="reference" data-od-id="reference">
-  <p class="eyebrow" data-reveal>05 — reference</p>
+  <p class="eyebrow" data-reveal>06 — reference</p>
   <h2 data-reveal style="--rd:80ms">Which function, and what do the numbers mean?</h2>
   <p class="lede" data-reveal style="--rd:160ms">The number in a hash function's name is its <strong>output size in bits</strong>. Divide by 8 for bytes, or by 4 for the hex characters you actually see on screen. That is the whole trick: SHA-256 → 32 bytes → 64 hex characters.</p>
 
@@ -747,6 +870,7 @@ const popcount = n => { let c = 0; while (n) { c += n & 1; n >>= 1; } return c; 
 const b64 = b => btoa(String.fromCharCode.apply(null, Array.from(b)));
 const hasSubtle = !!(window.crypto && window.crypto.subtle);
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const isTouch = window.matchMedia('(hover: none)').matches;
 
 /* ============================================================
    MD5  (RFC 1321)
@@ -1150,6 +1274,9 @@ async function update() {
   const a = ALGOS.find(x => x.id === state.algo);
   const bytes = enc.encode(inputEl.value);
 
+  // any re-hash invalidates an open save form
+  if (!saveFormEl.hidden) closeSaveForm();
+
   outName.textContent = a.name;
   outMeta.textContent = meta(a);
 
@@ -1252,6 +1379,195 @@ document.addEventListener('keydown', e => {
 });
 
 /* ============================================================
+   hash store  (localStorage)
+   ============================================================ */
+const STORE_KEY = 'oneway.saved.v1';
+const STORE_MAX = 50;
+
+const storeListEl  = $('#storeList');
+const storeEmptyEl = $('#storeEmpty');
+const saveFormEl   = $('#saveForm');
+const saveLabelEl  = $('#saveLabel');
+const saveBtn      = $('#saveBtn');
+const saveConfirm  = $('#saveConfirm');
+const saveCancel   = $('#saveCancel');
+const clearStoreBtn= $('#clearStore');
+const exportStoreBtn = $('#exportStore');
+
+function loadStore(){
+  try{
+    const raw = localStorage.getItem(STORE_KEY);
+    if(!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  }catch(e){ return []; }
+}
+function persistStore(items){
+  try{ localStorage.setItem(STORE_KEY, JSON.stringify(items)); }
+  catch(e){ /* quota / private mode — silently give up */ }
+}
+
+let storeItems = loadStore();
+
+function relTime(ts){
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 45) return 'just now';
+  const m = Math.floor(s / 60);
+  if (m < 60) return m + (m === 1 ? ' minute ago' : ' minutes ago');
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + (h === 1 ? ' hour ago' : ' hours ago');
+  const d = Math.floor(h / 24);
+  if (d < 7) return d + (d === 1 ? ' day ago' : ' days ago');
+  return new Date(ts).toLocaleDateString();
+}
+
+function renderStore(){
+  storeListEl.innerHTML = '';
+  const empty = storeItems.length === 0;
+  storeEmptyEl.hidden = !empty;
+  clearStoreBtn.disabled = empty;
+  exportStoreBtn.disabled = empty;
+  if (empty) return;
+
+  const sorted = storeItems.slice().sort((a, b) => b.savedAt - a.savedAt);
+
+  sorted.forEach(item => {
+    const a = ALGOS.find(x => x.id === item.algo);
+    const tagClass = a ? ('tag-' + a.tag) : 'tag-current';
+
+    const el = document.createElement('article');
+    el.className = 'storeitem';
+    el.innerHTML =
+      '<div class="store-main">' +
+        '<div class="store-head">' +
+          '<span class="store-label"></span>' +
+          '<span class="store-tag ' + tagClass + '"></span>' +
+        '</div>' +
+        '<div class="store-hex"></div>' +
+        '<div class="store-meta"></div>' +
+      '</div>' +
+      '<div class="store-btns">' +
+        '<button class="btn ghost small" data-act="copy">Copy</button>' +
+        '<button class="btn ghost small" data-act="del">Delete</button>' +
+      '</div>';
+
+    el.querySelector('.store-label').textContent = item.label || 'untitled';
+    el.querySelector('.store-tag').textContent = item.algoName || item.algo;
+    el.querySelector('.store-hex').textContent = item.hex;
+    el.querySelector('.store-meta').textContent = item.bits + ' bits · saved ' + relTime(item.savedAt);
+
+    el.querySelector('[data-act="copy"]').addEventListener('click', async ev => {
+      try{
+        await navigator.clipboard.writeText(item.hex);
+        const b = ev.currentTarget;
+        const old = b.textContent;
+        b.textContent = 'Copied';
+        b.classList.add('said');
+        setTimeout(() => { b.textContent = old; b.classList.remove('said'); }, 1200);
+      }catch(e){}
+    });
+
+    el.querySelector('[data-act="del"]').addEventListener('click', () => {
+      storeItems = storeItems.filter(x => x.id !== item.id);
+      persistStore(storeItems);
+      renderStore();
+    });
+
+    storeListEl.appendChild(el);
+  });
+}
+
+function openSaveForm(){
+  if(!currentHex) return;
+  const v = inputEl.value.trim();
+  let def;
+  if(v){
+    def = v.slice(0, 32);
+    if(v.length > 32) def += '…';
+  } else {
+    def = 'empty input';
+  }
+  saveLabelEl.value = def;
+  saveFormEl.hidden = false;
+  saveLabelEl.focus();
+  saveLabelEl.select();
+}
+function closeSaveForm(){
+  saveFormEl.hidden = true;
+}
+
+function commitSave(){
+  if(!currentHex) return;
+  const a = ALGOS.find(x => x.id === state.algo);
+  const label = (saveLabelEl.value || '').trim() || 'untitled';
+
+  storeItems.push({
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+    label,
+    algo: a.id,
+    algoName: a.name,
+    hex: currentHex,
+    bits: a.bits,
+    savedAt: Date.now()
+  });
+
+  if(storeItems.length > STORE_MAX) storeItems = storeItems.slice(-STORE_MAX);
+
+  persistStore(storeItems);
+  renderStore();
+  closeSaveForm();
+
+  saveBtn.textContent = 'Saved';
+  saveBtn.classList.add('said');
+  setTimeout(() => { saveBtn.textContent = 'Save hash'; saveBtn.classList.remove('said'); }, 1200);
+}
+
+saveBtn.addEventListener('click', openSaveForm);
+saveCancel.addEventListener('click', closeSaveForm);
+saveConfirm.addEventListener('click', commitSave);
+saveLabelEl.addEventListener('keydown', e => {
+  if(e.key === 'Enter'){ e.preventDefault(); commitSave(); }
+  if(e.key === 'Escape'){ closeSaveForm(); }
+});
+
+let clearArmed = false;
+clearStoreBtn.addEventListener('click', () => {
+  if(!storeItems.length) return;
+  if(!clearArmed){
+    clearArmed = true;
+    clearStoreBtn.textContent = 'Click again to confirm';
+    clearStoreBtn.classList.add('said');
+    setTimeout(() => {
+      clearArmed = false;
+      clearStoreBtn.textContent = 'Clear all';
+      clearStoreBtn.classList.remove('said');
+    }, 3000);
+    return;
+  }
+  clearArmed = false;
+  storeItems = [];
+  persistStore(storeItems);
+  renderStore();
+  clearStoreBtn.textContent = 'Clear all';
+  clearStoreBtn.classList.remove('said');
+});
+
+exportStoreBtn.addEventListener('click', () => {
+  if(!storeItems.length) return;
+  const blob = new Blob([JSON.stringify(storeItems, null, 2)], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'oneway-hashes.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+});
+
+renderStore();
+
+/* ============================================================
    password vault
    ============================================================ */
 const pwEl    = $('#pw');
@@ -1297,14 +1613,12 @@ async function runVault() {
   pwBtn.textContent = 'Working…';
 
   try {
-    // --- the wrong way: unsalted SHA-256 ---
     const plain = await crypto.subtle.digest('SHA-256', enc.encode(password));
     const plainHex = toHex(new Uint8Array(plain));
     badRows.innerHTML =
       row('alice', plainHex, 'same') +
       row('bob', plainHex, 'same');
 
-    // --- the right way: PBKDF2 with a fresh salt per user ---
     const saltA = crypto.getRandomValues(new Uint8Array(16));
     const saltB = crypto.getRandomValues(new Uint8Array(16));
 
@@ -1318,7 +1632,6 @@ async function runVault() {
     const recB = 'pbkdf2_sha256$' + iterations + '$' + b64(saltB) + '$' + b64(hashB);
     okRows.innerHTML = row('alice', recA) + row('bob', recB);
 
-    // --- real measurements, taken here ---
     const shaMs = await measureSha256(400);
     const pbMs = t1 - t0;
     const ratio = Math.round(pbMs / shaMs);
@@ -1357,10 +1670,8 @@ function setupReveals() {
     });
   }, { rootMargin: '0px 0px -8% 0px', threshold: 0.06 });
 
-  // single elements
   document.querySelectorAll('[data-reveal]').forEach(el => io.observe(el));
 
-  // staggered containers — children get their own reveal + delay
   document.querySelectorAll('[data-reveal-stagger]').forEach(parent => {
     const kids = Array.from(parent.children);
     kids.forEach((k, i) => {
@@ -1374,15 +1685,14 @@ function setupReveals() {
 
 /* ============================================================
    cursor-following light
+   On desktop: follows the pointer.
+   On touch: lights on tap and stays lit — no cursor to follow.
    ============================================================ */
 function setupGlow() {
   if (reduceMotion) return;
   document.querySelectorAll('.glow').forEach(el => {
     let mx = 0, my = 0, queued = false;
-    el.addEventListener('pointermove', (e) => {
-      const r = el.getBoundingClientRect();
-      mx = e.clientX - r.left;
-      my = e.clientY - r.top;
+    const paint = () => {
       if (queued) return;
       queued = true;
       requestAnimationFrame(() => {
@@ -1390,7 +1700,22 @@ function setupGlow() {
         el.style.setProperty('--my', my + 'px');
         queued = false;
       });
-    });
+    };
+    const setFrom = (clientX, clientY) => {
+      const r = el.getBoundingClientRect();
+      mx = clientX - r.left;
+      my = clientY - r.top;
+      paint();
+    };
+
+    if (isTouch) {
+      el.addEventListener('pointerdown', e => {
+        setFrom(e.clientX, e.clientY);
+        el.classList.add('is-lit');
+      }, { passive: true });
+    } else {
+      el.addEventListener('pointermove', e => setFrom(e.clientX, e.clientY));
+    }
   });
 }
 
@@ -1447,10 +1772,8 @@ async function boot() {
   }
 
   select(state.algo);
-  if (hasSubtle) runVault();
-  else runVault();
+  runVault();
 
-  // animations last so the DOM is stable
   setupReveals();
   setupGlow();
 }
